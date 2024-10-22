@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+    interface IProfile  {
+        struct UserProfile {
+        string displayName;
+        string bio;
+    }
+    function getProfile(address _user) external view returns (UserProfile memory);
+
+    }
 contract Twitter {
 
     uint16 public MAX_TWEET_LENGTH = 280;
@@ -15,13 +23,22 @@ contract Twitter {
     mapping(address => Tweet[] ) public tweets;
     address public owner;
 
-    // Define the events
+    // Initialize profileContract;
+    IProfile profileContract;
+
     event TweetCreated(uint256 id, address author, string content, uint256 timestamp);
     event TweetLiked(address liker, address tweetAuthor, uint256 tweetId, uint256 newLikeCount);
     event TweetUnliked(address unliker, address tweetAuthor, uint256 tweetId, uint256 newLikeCount);
 
-    constructor() {
+    modifier onlyRegistered(){
+        IProfile.UserProfile memory UserProfileTemp = profileContract.getProfile(msg.sender); 
+        require(bytes(UserProfileTemp.displayName).length > 0, "USER NOT REGISTERED");
+        _;    
+    }
+
+    constructor(address _profileContract) {
         owner = msg.sender;
+        profileContract = IProfile(_profileContract);
     }
 
     modifier onlyOwner() {
@@ -33,7 +50,17 @@ contract Twitter {
         MAX_TWEET_LENGTH = newTweetLength;
     }
 
-    function createTweet(string memory _tweet) public {
+    function getTotalLikes(address _author) external view returns(uint) {
+        uint totalLikes;
+
+        for( uint i = 0; i < tweets[_author].length; i++){
+            totalLikes += tweets[_author][i].likes;
+        }
+
+        return totalLikes;
+    }
+
+    function createTweet(string memory _tweet) public onlyRegistered{
         require(bytes(_tweet).length <= MAX_TWEET_LENGTH, "Tweet is too long bro!" );
 
         Tweet memory newTweet = Tweet({
@@ -46,41 +73,18 @@ contract Twitter {
 
         tweets[msg.sender].push(newTweet);
 
-        // Emit the TweetCreated event
         emit TweetCreated(newTweet.id, newTweet.author, newTweet.content, newTweet.timestamp);
     }
 
-    function likeTweet(address author, uint256 id) external {  
+    function likeTweet(address author, uint256 id) external onlyRegistered{  
         require(tweets[author][id].id == id, "TWEET DOES NOT EXIST");
 
         tweets[author][id].likes++;
 
-        // Emit the TweetLiked event
         emit TweetLiked(msg.sender, author, id, tweets[author][id].likes);
     }
 
-    // function getTotalLikes(address author) public view returns (uint){
-    //      uint totalLikes = 0; 
-    //    for(uint i=0; i < tweets[msg.sender].length; i++){
-    //     if(tweets[msg.sender][i].author == author){
-    //     totalLikes += tweets[msg.sender][i].likes;
-    //     }
-    //    }
-    //    return totalLikes;
-
-    // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> BOTH ARE OK. BUT 2ND ONE IS BEST PRACTICES.
-
-    function getTotalLikes(address author) public view returns (uint) {
-    uint totalLikes = 0; 
-    
-    for (uint i = 0; i < tweets[author].length; i++) {
-        totalLikes += tweets[author][i].likes;
-    }
-    
-    return totalLikes;
-}
-
-    function unlikeTweet(address author, uint256 id) external {
+    function unlikeTweet(address author, uint256 id) external onlyRegistered{
         require(tweets[author][id].id == id, "TWEET DOES NOT EXIST");
         require(tweets[author][id].likes > 0, "TWEET HAS NO LIKES");
         
